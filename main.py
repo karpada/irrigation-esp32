@@ -9,6 +9,7 @@ import urequests as requests
 import gc
 import sys
 from collections import namedtuple
+from uos import rename, stat
 
 # Global variables
 micropython_to_timestamp: int = 3155673600 - 2208988800  # 1970-2000
@@ -24,18 +25,17 @@ wifi_setup_mode = False
 # id: str = ':'.join([f"{b:02X}" for b in wlan.config('mac')[3:]]) FIXME: memory allocation failed, no idea why
 
 # Persistent storage functions
-def save_data(filename: str, data: dict) -> None:
+def save_as_json(filename: str, data: dict) -> None:
     print(f"Saving data to {filename}")
     with open(filename, 'w') as f:
         ujson.dump(data, f)
 
-def load_data(filename: str) -> dict:
+def load_from_json(filename: str) -> dict:
     try:
         with open(filename, 'r') as f:
             return ujson.load(f)
     except:
         return None
-
 
 async def connect_wifi() -> None:
     global irrigation_factor
@@ -101,7 +101,6 @@ def control_watering(zone_id: int, start: bool) -> None:
     if pin_id < 0:
         print("NOP pin_id<0")
         return
-
     pin = Pin(pin_id, Pin.OUT)
     if zone['on_pin'] == zone['off_pin']:
         pin.value(1 if start else 0)
@@ -110,9 +109,7 @@ def control_watering(zone_id: int, start: bool) -> None:
         pin.value(1)
         time.sleep(0.060)
         pin.value(0)
-
     Pin(pin_id, Pin.IN)
-
 
 async def apply_valves(new_status: int) -> None:
     global valve_status
@@ -308,20 +305,33 @@ def read_soil_moisture_milli() -> int:
 #############
 # HTTP server
 #############
+
+async def store_file(reader, length: int, filename: str) -> None:
+    try:
+        start_time = time.ticks_ms()
+        buf = memoryview(bytearray(1024))
+        with open('upload.tmp', 'wb') as f:
+            while length:
+                chunk_length = await reader.readinto(buf)
+                f.write(buf[:chunk_length])
+                length -= chunk_length
+        rename('upload.tmp', filename)
+        print(f'stored {filename} (stat={stat(filename)}) in {time.ticks_ms() - start_time}ms')
+    except Exception as e:
+        print(f"Error storing [{filename}]: {e}")
+        raise
+
 async def serve_file(filename: str, writer) -> None:
     try:
         start_time = time.ticks_ms()
+        buf = memoryview(bytearray(1024))
         with open(filename, 'r') as f:
-            while True:
-                chunk = f.read(1024)  # Read 1KB at a time
-                if not chunk:
-                    break
-                writer.write(chunk)
-                await writer.drain()
-                await asyncio.sleep(0.005) # makes serving more stable
+            while length := f.readinto(buf):
+                writer.write(buf[:length])
         print(f'served {time.ticks_ms() - start_time}ms')
     except Exception as e:
         print(f"Error serving [{filename}]: {e}")
+        raise
 
 async def read_http_headers(reader) -> dict:
     headers = {}
@@ -360,8 +370,6 @@ async def handle_request(reader, writer):
 
         print(f"@{time.time()} Request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})")  #     headers={headers}")
 
-        body = ujson.loads((await reader.read(content_length)).decode()) if content_length > 0 else None
-
         if method == 'GET' and path == '/':
             filename = 'setup.html' if wifi_setup_mode else 'index.html'
             content_type = 'text/html'
@@ -372,11 +380,27 @@ async def handle_request(reader, writer):
             # curl example: curl http://[ESP32_IP]/config
             response = ujson.dumps(config)
         elif method == 'POST' and path == '/config':
+            body = ujson.loads((await reader.read(content_length)).decode()) if content_length > 0 else None
             # restore backup: jq . irrigation-config.json | curl -H "Content-Type: application/json" -X POST --data-binary @- http://192.168.68.ESP/config
             print(f"applying new config = {body}")
             apply_config(body)
             response = ujson.dumps(config)
-            save_data('config.json', config)
+            save_as_json('config.json', config)
+        elif method == 'POST' and path.startswith('/file/'):
+            # curl -X POST --data-binary @main.py http://192.168.68.114/file/main.py\?reboot\=1
+            print(f"Updating {path[6:]}")
+            await store_file(reader, content_length, path[6:])
+            if '1' == query_params.get('reboot', '0'):
+                print("Rebooting...")
+                reset()
+            response = ujson.dumps({
+                "method": method,
+                "filepath": path[6:],
+                "stat": ujson.dumps(stat(path[6:])),
+            })
+        elif method == 'GET' and path.startswith('/file/'):
+            filename = path[6:]
+            content_type = 'text/html'
         elif method == 'GET' and path == '/status':
             # tt = time.gmtime()
             response = ujson.dumps({
@@ -390,7 +414,7 @@ async def handle_request(reader, writer):
             })
         elif wifi_setup_mode and method == 'GET' and path == '/setup':
                 print(f"Setup: query_params={query_params}")
-                save_data('config.json', {"options": { "wifi": query_params }})
+                save_as_json('config.json', {"options": { "wifi": query_params }})
                 print("Restarting...")
                 await asyncio.sleep(0.1)
                 if heartbeat_pin_id > 0:
@@ -472,7 +496,7 @@ async def main():
     if bootstrap.button_pin_id >= 0:
         await wait_for_wifi_setup(bootstrap.button_pin_id, 1)
 
-    apply_config(load_data('config.json') or {})
+    apply_config(load_from_json('config.json') or {})
     # force all valves off
     valve_status = (1<<len(config['zones']))-1
     await apply_valves(0)

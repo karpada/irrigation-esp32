@@ -122,12 +122,10 @@ async def apply_valves(new_status: int) -> None:
 
     print(f"@{time.time()} apply_valves({new_status:08b}), valve_status={valve_status:08b}")
 
-    if relay_pin:=config['options']['settings']['relay_pin'] >= 0:
-        relay_pin = Pin(relay_pin, Pin.OUT)
-        relay_pin.value(1)
+    relay_pin_id = config['options']['settings']['relay_pin_id']
+    if relay_pin_id >= 0:
+        Pin(relay_pin_id, Pin.OUT).value(1)
         await asyncio.sleep(0.100) # wait for H-Bridges to power up
-    else:
-        relay_pin = None
 
     for i in range(len(config['zones'])):
         if (valve_status^new_status)>>i & 1:
@@ -135,9 +133,8 @@ async def apply_valves(new_status: int) -> None:
             await asyncio.sleep(0.050) # wait to settle down
     valve_status = new_status
 
-    if relay_pin:
-        relay_pin.value(0)
-        relay_pin.mode(Pin.IN)
+    if relay_pin_id >= 0:
+        Pin(relay_pin_id, Pin.IN)
 
 ######################
 # Irrigation scheduler
@@ -272,7 +269,7 @@ def apply_config(new_config: dict) -> None:
         "settings": {
             "enable_irrigation_schedule": bool(bo['settings'].get('enable_irrigation_schedule', True)),
             "timezone_offset": float(bo['settings'].get('timezone_offset', -7)),
-            "relay_pin": int(bo['settings'].get('relay_pin', 14)),
+            "relay_pin_id": int(bo['settings'].get('relay_pin_id', -1)),
             "heartbeat_pin_id": int(bo['settings'].get('heartbeat_pin_id', heartbeat_pin_id)),
         },
     }

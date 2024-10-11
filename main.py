@@ -7,6 +7,8 @@ import ntptime
 import uasyncio as asyncio
 import urequests as requests
 import gc
+import sys
+from collections import namedtuple
 
 # Global variables
 micropython_to_timestamp: int = 3155673600 - 2208988800  # 1970-2000
@@ -17,7 +19,7 @@ config: dict = None
 valve_status: int = 0
 schedule_status: int = 0
 irrigation_factor: float = 1.0
-heartbeat_pin_id: int = 15
+heartbeat_pin_id: int = -1
 wifi_setup_mode = False
 # id: str = ':'.join([f"{b:02X}" for b in wlan.config('mac')[3:]]) FIXME: memory allocation failed, no idea why
 
@@ -271,7 +273,7 @@ def apply_config(new_config: dict) -> None:
             "enable_irrigation_schedule": bool(bo['settings'].get('enable_irrigation_schedule', True)),
             "timezone_offset": float(bo['settings'].get('timezone_offset', -7)),
             "relay_pin": int(bo['settings'].get('relay_pin', 14)),
-            "heartbeat_pin_id": int(bo['settings'].get('heartbeat_pin_id', 15)),
+            "heartbeat_pin_id": int(bo['settings'].get('heartbeat_pin_id', heartbeat_pin_id)),
         },
     }
 
@@ -432,16 +434,16 @@ async def send_metrics():
         finally:
             await asyncio.sleep(config['options']['monitoring']['send_interval_sec'])
 
-async def wait_for_wifi_setup(wait_time: int) -> None:
+async def wait_for_wifi_setup(button_pin_id: int, wait_time: int) -> None:
     global wifi_setup_mode
 
     for _ in range(round(wait_time*10)):
         await asyncio.sleep(0.1)
-        if 0 == Pin(0, Pin.IN, Pin.PULL_UP).value():
+        if 0 == Pin(button_pin_id, Pin.IN, Pin.PULL_UP).value():
             wifi_setup_mode = True
             break
     if wifi_setup_mode:
-        if heartbeat_pin_id > 0:
+        if heartbeat_pin_id >= 0:
             PWM(Pin(heartbeat_pin_id), freq=5, duty_u16=32768)
         ap = network.WLAN(network.AP_IF)
         ap.active(True)
@@ -452,9 +454,26 @@ async def wait_for_wifi_setup(wait_time: int) -> None:
 
 async def main():
     global valve_status
+    global heartbeat_pin_id
+
+    if sys.maxsize>>30 == 0:
+        print(">>> We have less than 31 bits :(")
+
+    BoardBootstrap = namedtuple('BoardBootstrap', ['name', 'button_pin_id', 'heartbeat_pin_id'])
+    for bootstrap in [
+        BoardBootstrap('ESP32S3', 0, 44), # blue
+        BoardBootstrap('ESP8266', -1, 2),
+        BoardBootstrap('S2_MINI', 0, 15),
+    ]:
+        if bootstrap.name in sys.implementation._machine:
+            break
+    print(f"Starting irrigation-esp32 on [{sys.implementation._machine}] detected as {bootstrap}")
+    heartbeat_pin_id = bootstrap.heartbeat_pin_id
 
     freq(80_000_000)
-    await wait_for_wifi_setup(1)
+
+    if bootstrap.button_pin_id >= 0:
+        await wait_for_wifi_setup(bootstrap.button_pin_id, 1)
 
     apply_config(load_data('config.json') or {})
     # force all valves off

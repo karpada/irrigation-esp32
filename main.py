@@ -43,6 +43,7 @@ async def connect_wifi() -> None:
     try:
         if not config['options']['wifi']['ssid']:
             return
+        network.hostname(config['options']['wifi']['hostname'])
         wlan.active(True)
         print(f'@{time.time()} wifi connecting.', end='')
         wlan.connect(config['options']['wifi']['ssid'], config['options']['wifi']['password'])
@@ -52,7 +53,7 @@ async def connect_wifi() -> None:
             await asyncio.sleep(1)
             print('.', end='')
         if wlan.isconnected():
-            print(f"connected, ip = {wlan.ifconfig()[0]}")
+            print(f"connected, ip = {wlan.ifconfig()[0]}, hostname={config['options']['wifi']['hostname']}")
             return
         wlan.active(False)
         print('network connection failed, retrying in 60 seconds')
@@ -247,6 +248,7 @@ def apply_config(new_config: dict) -> None:
         "wifi": {
             "ssid": str(bo['wifi'].get('ssid', '')),
             "password": str(bo['wifi'].get('password', '')),
+            "hostname": str(bo['wifi'].get('hostname', 'irrigation-'+''.join([f'{b:02x}' for b in wlan.config('mac')[3:6]]))),
         },
         "irrigation_factor": {
             "override": float(bo['irrigation_factor'].get('override', -1)),

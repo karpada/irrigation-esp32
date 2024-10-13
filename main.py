@@ -54,18 +54,18 @@ async def connect_wifi() -> None:
         if wlan.isconnected():
             print(f"connected, ip = {wlan.ifconfig()[0]}")
             return
+        wlan.active(False)
+        print('network connection failed, retrying in 60 seconds')
     except Exception as e:
-        print(f"Error keeping wifi connected: {e}")
-    wlan.active(False)
-    print('network connection failed, retrying in 10 seconds')
+        wlan.active(False)
+        print(f"Exception while connecting to wifi: {e}")
 
 async def keep_wifi_connected():
-
     while True:
         while wlan.isconnected():
             await asyncio.sleep(10)
-        await asyncio.sleep(10)
-
+        await asyncio.sleep(60)
+        connect_wifi()
 
 # Time functions
 def get_local_timestamp() -> int:

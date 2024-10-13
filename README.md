@@ -50,23 +50,20 @@ Depends on the valve/pump used, conroller may be powered by a USB charger & cabl
 ## References:
 1. 
 
-# Installation
+## Initial setup
 1. using Thonny, copy main.py, index.html, setup.html to the ESP32
 1. reset & enter wifi setup mode by pressing the button within 1 second, led will blink rapidly.
 1. connect to the ESP32's wifi `irrigation-esp32` and configure the wifi settings
 
+## Updating the code
+```bash
+URL=http://192.168.123.456
+for html in *.html; do time curl -X POST --data-binary @$html ${URL}/file/$html | jq; done
+curl -X POST --data-binary @main.py ${URL}/file/main.py\?reboot\=1
+curl ${URL}/status | jq
+```
+
 # TODO
 1. Implement pause_hours
 1. manual watering
-1. fix: 
-    ```
-    Task exception wasn't retrieved
-    future: <Task> coro= <generator object 'keep_wifi_connected' at 3f803b20>
-    Traceback (most recent call last):
-    File "asyncio/core.py", line 1, in run_until_complete
-    File "<stdin>", line 60, in keep_wifi_connected
-    File "<stdin>", line 42, in connect_wifi
-    OSError: Wifi Internal Error
-    ```
-    Failing line (line 42, in connect_wifi) = `wlan.connect(config['options']['wifi']['ssid'], config['options']['wifi']['password'])`
 1.

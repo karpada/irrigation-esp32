@@ -98,19 +98,20 @@ def control_watering(zone_id: int, start: bool) -> None:
         return
     zone = config["zones"][zone_id]
     pin_id = zone['on_pin'] if start else zone['off_pin']
-    print(f"Zones[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will be set {start} using pin_id=({pin_id})")
     if pin_id < 0:
         print("NOP pin_id<0")
         return
-    pin = Pin(pin_id, Pin.OUT)
+    pin_value = 1 if config['options']['settings']['pin_high_valve_open'] else 0
+    print(f"Zones[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will be set {'open' if start else 'close'} using pin_id({pin_id}).value({pin_value})")
     if zone['on_pin'] == zone['off_pin']:
-        pin.value(1 if start else 0)
+        if start:
+            Pin(pin_id, Pin.OUT).value(pin_value)
+        else:
+            Pin(pin_id, Pin.IN)
     else:
-        # pulse on two pins
-        pin.value(1)
+        Pin(pin_id, Pin.OUT).value(pin_value)
         time.sleep(0.060)
-        pin.value(0)
-    Pin(pin_id, Pin.IN)
+        Pin(pin_id, Pin.IN)
 
 async def apply_valves(new_status: int) -> None:
     global valve_status
@@ -270,6 +271,7 @@ def apply_config(new_config: dict) -> None:
             "timezone_offset": float(bo['settings'].get('timezone_offset', -7)),
             "relay_pin_id": int(bo['settings'].get('relay_pin_id', -1)),
             "heartbeat_pin_id": int(bo['settings'].get('heartbeat_pin_id', heartbeat_pin_id)),
+            "pin_high_valve_open": bool(bo['settings'].get('pin_high_valve_open', True)),
         },
     }
 

@@ -1,7 +1,20 @@
-# irrigation-esp32
+# RSI - Real Simple Irrigation
 Design philosophy:
 1. Easy to source generic components
-1. Cheap - excluding the valves, cost should be under 10$
+1. Cheap - cost could be as low as 10$ (including the valve)
+1. Easy to setup - no soldering required
+1. Scheduled watering based on soil moisture
+
+## Component cost
+| Component | Spec | Cost |
+| --- | --- | --- |
+| Controller | ESP32-S2 | $2 |
+| Soil moisture sensor | LM393 | $1 |
+| Driver | L298N | $1.5 |
+| Valve | 1/2" Selonoid 12V DC (Plastic) | $3.5 |
+| Jumper wires | 10cm F-F | $0.5 |
+| Power supply | 12V DC 1A | $1.5 |
+| Total | | $10 |
 
 # Hardware
 

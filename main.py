@@ -249,7 +249,7 @@ def apply_config(new_config: dict) -> None:
         "wifi": {
             "ssid": str(bo['wifi'].get('ssid', '')),
             "password": str(bo['wifi'].get('password', '')),
-            "hostname": str(bo['wifi'].get('hostname', 'irrigation-'+''.join([f'{b:02x}' for b in wlan.config('mac')[3:6]]))),
+            "hostname": str(bo['wifi'].get('hostname', 'rsi-'+''.join([f'{b:02x}' for b in wlan.config('mac')[3:6]]))),
         },
         "irrigation_factor": {
             "override": float(bo['irrigation_factor'].get('override', -1)),
